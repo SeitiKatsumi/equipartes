@@ -5,6 +5,7 @@ Interface local para gerar carrosseis 4:5 usando assets, briefing, presets de es
 ## Recursos
 
 - Layout Neutro para usar com diferentes clientes.
+- Gerador de roteiro a partir de um tema, com pesquisa quando a API permitir.
 - Presets editoriais e ilustrativos para direcionar a geracao.
 - Geracao assincrona com barra de progresso e thumbs das artes geradas/finalizadas.
 - Assets por pasta local, URL direta de imagem ou pasta publica do Google Drive.

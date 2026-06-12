@@ -111,6 +111,7 @@ h2 { font-size: 29px; }
 }
 
 .brief, .copy, .log { min-height: 360px; }
+.research-panel { grid-column: 1 / -1; }
 .actions { display: flex; justify-content: space-between; align-items: center; gap: 24px; grid-column: 1 / -1; }
 .progress-panel { grid-column: 1 / -1; }
 .log { grid-column: 1 / -1; }
@@ -158,6 +159,10 @@ textarea {
   font-size: 13px;
 }
 
+.notes-input {
+  min-height: 96px;
+}
+
 .hint {
   display: block;
   margin-top: 7px;
@@ -192,6 +197,10 @@ button:disabled { opacity: .55; cursor: progress; }
   background: var(--orange);
   color: #110b08;
   border-color: var(--orange);
+}
+
+.small-primary {
+  min-width: 220px;
 }
 
 .ghost {

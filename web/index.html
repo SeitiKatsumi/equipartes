@@ -21,6 +21,43 @@
       </aside>
 
       <section class="workspace">
+        <div class="panel research-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Pesquisa</p>
+              <h2>Gerar roteiro por tema</h2>
+            </div>
+            <button id="generateBriefing" class="primary small-primary">Pesquisar e criar roteiro</button>
+          </div>
+
+          <div class="grid-2">
+            <label>
+              Tema
+              <input id="topicInput" placeholder="Ex.: recuperação muscular para corredores amadores" />
+            </label>
+            <label>
+              Cliente ou marca
+              <input id="clientName" placeholder="Ex.: Clínica, marca, profissional ou projeto" />
+            </label>
+          </div>
+
+          <div class="grid-2">
+            <label>
+              Público
+              <input id="audienceInput" placeholder="Ex.: corredores iniciantes, gestores, mães, médicos..." />
+            </label>
+            <label>
+              Objetivo
+              <input id="objectiveInput" placeholder="Ex.: educar, vender, captar leads, explicar uma regra..." />
+            </label>
+          </div>
+
+          <label>
+            Observações, fontes ou ângulo obrigatório
+            <textarea id="researchNotes" class="notes-input" placeholder="Opcional: inclua links, dados, tom de voz, restrições, produtos, oferta ou exemplos que devem entrar no roteiro."></textarea>
+          </label>
+        </div>
+
         <div class="panel setup">
           <div class="panel-head">
             <div>

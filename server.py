@@ -94,7 +94,11 @@ def json_response(handler: BaseHTTPRequestHandler, payload: Any, status: int = 2
 def read_json(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
     length = int(handler.headers.get("Content-Length", "0"))
     raw = handler.rfile.read(length) if length else b"{}"
-    return json.loads(raw.decode("utf-8"))
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = raw.decode("latin-1")
+    return json.loads(text)
 
 
 def safe_path(value: str) -> Path:
@@ -369,6 +373,77 @@ Entregue em portugues:
     return response.output_text
 
 
+def generate_briefing(payload: dict[str, Any]) -> dict[str, str]:
+    client = open_client()
+    topic = payload.get("topic", "").strip()
+    if not topic:
+        raise ValueError("Informe um tema para criar o roteiro.")
+    client_name = payload.get("clientName", "").strip() or "cliente"
+    audience = payload.get("audience", "").strip() or "público do Instagram"
+    objective = payload.get("objective", "").strip() or "educar, gerar salvamentos e iniciar conversa"
+    notes = payload.get("researchNotes", "").strip()
+    style_id = payload.get("styleId", "neutro")
+    slide_count = int(payload.get("slideCount", 10))
+    model = payload.get("textModel") or os.environ.get("OPENAI_TEXT_MODEL", "gpt-5.1")
+
+    prompt = f"""
+Você é estrategista de conteúdo, pesquisador e roteirista de carrosséis para Instagram.
+Crie um briefing completo para gerar artes 4:5 depois.
+
+Tema: {topic}
+Cliente/marca: {client_name}
+Público: {audience}
+Objetivo: {objective}
+Quantidade de slides: {slide_count}
+Estilo visual: {style_id} - {STYLE_PRESETS.get(style_id, "")}
+Observações e fontes fornecidas pelo usuário:
+{notes or "Nenhuma."}
+
+Regras:
+- Pesquise e organize o tema com cuidado quando houver ferramenta de busca disponível.
+- Se algum dado parecer incerto ou temporal, sinalize no próprio roteiro como ponto a verificar.
+- Entregue em português do Brasil.
+- O roteiro deve estar pronto para colar no campo de briefing e gerar imagens.
+- Use estrutura numerada 01 até {slide_count:02d}.
+- Cada slide deve ter: título principal, texto curto de apoio, dados/exemplos quando úteis, direção visual.
+- Inclua uma copy do post ao final, com hook, corpo, CTA e aviso se o tema exigir cuidado.
+- Não invente promessas, números ou fontes específicas se não houver segurança.
+
+Formato obrigatório:
+BRIEFING PARA ARTES
+01
+TÍTULO:
+TEXTO:
+VISUAL:
+
+...
+
+COPY DO CARROSSEL
+...
+""".strip()
+
+    try:
+        response = client.responses.create(
+            model=model,
+            input=prompt,
+            tools=[{"type": "web_search_preview"}],
+        )
+    except Exception:
+        try:
+            response = client.responses.create(model=model, input=prompt)
+        except Exception:
+            response = client.responses.create(model="gpt-4.1", input=prompt)
+
+    text = response.output_text
+    copy_marker = "COPY DO CARROSSEL"
+    if copy_marker in text:
+        briefing, copy = text.split(copy_marker, 1)
+        copy = f"{copy_marker}{copy}".strip()
+    else:
+        briefing, copy = text, ""
+    return {"briefing": briefing.strip(), "copy": copy.strip(), "full": text.strip()}
+
+
 def maybe_apply_real_logo(image_path: Path, logo_path: Path | None, mode: str) -> None:
     if mode != "apply_real" or logo_path is None or not logo_path.exists():
         return
@@ -620,6 +695,8 @@ class Handler(BaseHTTPRequestHandler):
                 }
             elif self.path == "/api/scan-assets":
                 data = find_assets(resolve_assets_source(payload["assetsPath"]))
+            elif self.path == "/api/generate-briefing":
+                data = generate_briefing(payload)
             elif self.path == "/api/generate-copy":
                 data = {"copy": generate_copy(payload)}
             elif self.path == "/api/start-carousel":

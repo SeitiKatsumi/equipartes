@@ -55,6 +55,18 @@ function payload() {
   };
 }
 
+function briefingPayload() {
+  return {
+    topic: $("topicInput").value,
+    clientName: $("clientName").value,
+    audience: $("audienceInput").value,
+    objective: $("objectiveInput").value,
+    researchNotes: $("researchNotes").value,
+    slideCount: Number($("slideCount").value || 10),
+    styleId: $("styleId").value,
+  };
+}
+
 function resetProgress(total = 0) {
   $("progressLabel").textContent = `0/${total}`;
   $("progressStage").textContent = total ? "Preparando geração." : "Nenhuma geração em andamento.";
@@ -127,6 +139,23 @@ $("scanAssets").addEventListener("click", async () => {
     log("Assets encontrados", data);
   } catch (error) {
     log("Erro ao ler assets", { error: error.message });
+  } finally {
+    setBusy(false);
+  }
+});
+
+$("generateBriefing").addEventListener("click", async () => {
+  try {
+    setBusy(true, "Criando roteiro");
+    log("Pesquisando e estruturando roteiro", briefingPayload());
+    const data = await postJson("/api/generate-briefing", briefingPayload());
+    $("briefing").value = data.briefing || data.full || "";
+    if (data.copy) {
+      $("copyText").value = data.copy;
+    }
+    log("Roteiro criado", { briefingChars: $("briefing").value.length, copyChars: $("copyText").value.length });
+  } catch (error) {
+    log("Erro ao criar roteiro", { error: error.message });
   } finally {
     setBusy(false);
   }
