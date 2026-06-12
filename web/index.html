@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gerador de Artes 11RUN</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <aside class="rail">
+        <div class="brand-mark"></div>
+        <div>
+          <p class="eyebrow">11RUN</p>
+          <h1>Gerador de carrosséis</h1>
+        </div>
+        <div class="status-card">
+          <span class="dot"></span>
+          <span id="apiState">Pronto para configurar</span>
+        </div>
+      </aside>
+
+      <section class="workspace">
+        <div class="panel setup">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Entrada</p>
+              <h2>Briefing e assets</h2>
+            </div>
+            <button id="scanAssets" class="ghost">Ler assets</button>
+          </div>
+
+          <label>
+            Pasta Assets
+            <input id="assetsPath" value="D:\active projects\Z1 Elevenmind\11run\Assets" />
+          </label>
+
+          <label>
+            Pasta final
+            <input id="outputPath" value="D:\active projects\Z1 Elevenmind\11run\criativos\novo_carrossel" />
+          </label>
+
+          <div class="grid-2">
+            <label>
+              Quantidade de slides
+              <input id="slideCount" type="number" min="1" max="20" value="10" />
+            </label>
+            <label>
+              Qualidade
+              <select id="quality">
+                <option value="high">Alta</option>
+                <option value="medium">Média</option>
+                <option value="auto">Auto</option>
+              </select>
+            </label>
+          </div>
+
+          <label>
+            Estilo visual
+            <select id="styleId">
+              <option value="editorial_11run">Editorial 11RUN</option>
+              <option value="mais_ilustrativo">Mais ilustrativo</option>
+              <option value="super_minimalista">Super minimalista</option>
+              <option value="flat_infografico">Flat infográfico</option>
+              <option value="tecnico_futurista">Técnico futurista</option>
+              <option value="cinematico_ilustrado">Cinemático ilustrado</option>
+            </select>
+          </label>
+
+          <label>
+            Logo
+            <select id="logoMode">
+              <option value="apply_real">Logo real aplicado no fechamento</option>
+              <option value="reserve">Reservar espaço para logo</option>
+              <option value="prompt">Tentar gerar com logo integrado</option>
+              <option value="none">Sem logo</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="panel brief">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Briefing</p>
+              <h2>Prompt do carrossel</h2>
+            </div>
+            <button id="sampleBrief" class="ghost">Exemplo</button>
+          </div>
+          <textarea id="briefing" placeholder="Cole aqui o briefing completo, textos por slide, regras, público e observações visuais."></textarea>
+        </div>
+
+        <div class="panel copy">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Copy</p>
+              <h2>Legenda e estrutura</h2>
+            </div>
+            <button id="generateCopy">Gerar copy</button>
+          </div>
+          <textarea id="copyText" placeholder="A copy gerada aparece aqui e será salva junto do carrossel. Você também pode editar antes de gerar as artes."></textarea>
+        </div>
+
+        <div class="panel actions">
+          <div>
+            <p class="eyebrow">Saída</p>
+            <h2>Gerar imagens</h2>
+            <p class="muted">Cada slide é criado pela API com as referências da pasta Assets. O fechamento gera PNGs 1080x1350 e um arquivo de copy.</p>
+          </div>
+          <button id="generateCarousel" class="primary">Gerar carrossel completo</button>
+        </div>
+
+        <div class="panel log">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Log</p>
+              <h2>Execução</h2>
+            </div>
+            <button id="clearLog" class="ghost">Limpar</button>
+          </div>
+          <pre id="logOutput"></pre>
+        </div>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
+

@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+*.log
+.env
+.venv/
+venv/
+jobs/
+raw_*/
+final_*/
+arquivo_geracoes_anteriores_*/
