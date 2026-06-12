@@ -112,6 +112,7 @@ h2 { font-size: 29px; }
 
 .brief, .copy, .log { min-height: 360px; }
 .actions { display: flex; justify-content: space-between; align-items: center; gap: 24px; grid-column: 1 / -1; }
+.progress-panel { grid-column: 1 / -1; }
 .log { grid-column: 1 / -1; }
 
 .panel-head {
@@ -150,6 +151,19 @@ textarea {
   min-height: 280px;
   resize: vertical;
   line-height: 1.5;
+}
+
+.path-input {
+  min-height: 72px;
+  font-size: 13px;
+}
+
+.hint {
+  display: block;
+  margin-top: 7px;
+  color: rgba(170, 164, 154, .78);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .copy textarea { min-height: 282px; }
@@ -202,10 +216,89 @@ pre {
   line-height: 1.5;
 }
 
+.progress-label {
+  color: var(--orange);
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.progress-track {
+  height: 9px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255,255,255,.05);
+}
+
+.progress-bar {
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--orange), #ff8a3d);
+  box-shadow: 0 0 24px rgba(255, 74, 24, .35);
+  transition: width .35s ease;
+}
+
+.thumb-sections {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+h3 {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.8px;
+}
+
+.thumb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 10px;
+  min-height: 116px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0,0,0,.18);
+}
+
+.thumb {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  aspect-ratio: 4 / 5;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 6px;
+  background: rgba(255,255,255,.04);
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.thumb figcaption {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(0,0,0,.72);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 @media (max-width: 980px) {
   .app, .workspace { grid-template-columns: 1fr; }
   .rail { min-height: auto; }
   .actions { align-items: stretch; flex-direction: column; }
   .primary { width: 100%; }
+  .thumb-sections { grid-template-columns: 1fr; }
 }
-

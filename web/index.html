@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Gerador de Artes 11RUN</title>
+    <title>Gerador de Artes</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -11,7 +11,7 @@
       <aside class="rail">
         <div class="brand-mark"></div>
         <div>
-          <p class="eyebrow">11RUN</p>
+          <p class="eyebrow">Criativos</p>
           <h1>Gerador de carrosséis</h1>
         </div>
         <div class="status-card">
@@ -31,8 +31,9 @@
           </div>
 
           <label>
-            Pasta Assets
-            <input id="assetsPath" value="D:\active projects\Z1 Elevenmind\11run\Assets" />
+            Assets
+            <textarea id="assetsPath" class="path-input">D:\active projects\Z1 Elevenmind\11run\Assets</textarea>
+            <span class="hint">Use uma pasta local, URL direta de imagem ou pasta pública do Google Drive. Para várias URLs, coloque uma por linha.</span>
           </label>
 
           <label>
@@ -58,6 +59,7 @@
           <label>
             Estilo visual
             <select id="styleId">
+              <option value="neutro">Layout Neutro</option>
               <option value="editorial_11run">Editorial 11RUN</option>
               <option value="mais_ilustrativo">Mais ilustrativo</option>
               <option value="super_minimalista">Super minimalista</option>
@@ -104,9 +106,33 @@
           <div>
             <p class="eyebrow">Saída</p>
             <h2>Gerar imagens</h2>
-            <p class="muted">Cada slide é criado pela API com as referências da pasta Assets. O fechamento gera PNGs 1080x1350 e um arquivo de copy.</p>
+            <p class="muted">Cada slide é criado pela API com as referências dos assets. O fechamento gera PNGs 1080x1350 e um arquivo de copy.</p>
           </div>
           <button id="generateCarousel" class="primary">Gerar carrossel completo</button>
+        </div>
+
+        <div class="panel progress-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Progresso</p>
+              <h2>Criação das artes</h2>
+            </div>
+            <span id="progressLabel" class="progress-label">0/0</span>
+          </div>
+          <div class="progress-track">
+            <div id="progressBar" class="progress-bar"></div>
+          </div>
+          <p id="progressStage" class="muted">Nenhuma geração em andamento.</p>
+          <div class="thumb-sections">
+            <div>
+              <h3>Geradas pela API</h3>
+              <div id="rawThumbs" class="thumb-grid"></div>
+            </div>
+            <div>
+              <h3>Finalizadas</h3>
+              <div id="finalThumbs" class="thumb-grid"></div>
+            </div>
+          </div>
         </div>
 
         <div class="panel log">
@@ -124,4 +150,3 @@
     <script src="/app.js"></script>
   </body>
 </html>
-

@@ -5,11 +5,16 @@ import json
 import mimetypes
 import os
 import re
+import shutil
 import threading
 import time
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from tempfile import gettempdir
 from typing import Any
+from urllib.parse import parse_qs, urlparse
+from urllib.request import Request, urlopen
 
 from PIL import Image
 
@@ -25,9 +30,17 @@ HOST = "127.0.0.1"
 PORT = int(os.environ.get("ART_GEN_PORT", "8787"))
 HOST = os.environ.get("ART_GEN_HOST", HOST)
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
+ASSET_CACHE = Path(gettempdir()) / "gerador-artes-assets"
+JOBS: dict[str, dict[str, Any]] = {}
+JOBS_LOCK = threading.Lock()
 
 
 STYLE_PRESETS: dict[str, str] = {
+    "neutro": (
+        "Neutral premium editorial style for multiple clients: refined black or light neutral background depending on the references, "
+        "brand-agnostic composition, elegant typography, clean infographic hierarchy, tasteful technical lines, subtle accent color from the supplied assets, "
+        "no 11RUN-specific ornaments unless the assets clearly request them."
+    ),
     "editorial_11run": (
         "Premium editorial 11RUN: black textured paper, elegant high-fashion serif typography, "
         "thin orange technical lines, target ornaments, dotted grid, ruler ticks, flat infographic layout, "
@@ -56,6 +69,19 @@ STYLE_PRESETS: dict[str, str] = {
 }
 
 
+def set_job(job_id: str, **updates: Any) -> None:
+    with JOBS_LOCK:
+        job = JOBS.setdefault(job_id, {})
+        job.update(updates)
+        job["updatedAt"] = time.time()
+
+
+def get_job(job_id: str) -> dict[str, Any] | None:
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+        return dict(job) if job else None
+
+
 def json_response(handler: BaseHTTPRequestHandler, payload: Any, status: int = 200) -> None:
     body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
     handler.send_response(status)
@@ -75,6 +101,125 @@ def safe_path(value: str) -> Path:
     if not value or not value.strip():
         raise ValueError("Caminho vazio.")
     return Path(value.strip().strip('"')).expanduser()
+
+
+def is_url(value: str) -> bool:
+    return value.strip().lower().startswith(("http://", "https://"))
+
+
+def http_get(url: str) -> bytes:
+    request = Request(url, headers={"User-Agent": "Mozilla/5.0 GeradorDeArtes/1.0"})
+    with urlopen(request, timeout=45) as response:
+        return response.read()
+
+
+def extension_from_url_or_type(url: str, content_type: str | None = None) -> str:
+    suffix = Path(urlparse(url).path).suffix.lower()
+    if suffix in IMAGE_EXTS:
+        return suffix
+    guessed = mimetypes.guess_extension(content_type or "") if content_type else None
+    return guessed if guessed in IMAGE_EXTS else ".png"
+
+
+def google_drive_file_id(url: str) -> str | None:
+    parsed = urlparse(url)
+    if "drive.google.com" not in parsed.netloc:
+        return None
+    match = re.search(r"/file/d/([A-Za-z0-9_-]+)", parsed.path)
+    if match:
+        return match.group(1)
+    query_id = parse_qs(parsed.query).get("id", [None])[0]
+    return query_id
+
+
+def google_drive_folder_id(url: str) -> str | None:
+    parsed = urlparse(url)
+    if "drive.google.com" not in parsed.netloc:
+        return None
+    match = re.search(r"/folders/([A-Za-z0-9_-]+)", parsed.path)
+    return match.group(1) if match else None
+
+
+def download_drive_file(file_id: str, target_dir: Path, index: int) -> Path | None:
+    url = f"https://drive.google.com/uc?export=download&id={file_id}"
+    request = Request(url, headers={"User-Agent": "Mozilla/5.0 GeradorDeArtes/1.0"})
+    with urlopen(request, timeout=60) as response:
+        data = response.read()
+        content_type = response.headers.get("Content-Type", "")
+    if "text/html" in content_type.lower():
+        text = data.decode("utf-8", errors="ignore")
+        token_match = re.search(r"confirm=([0-9A-Za-z_]+)", text)
+        if token_match:
+            data = http_get(f"{url}&confirm={token_match.group(1)}")
+        else:
+            return None
+    ext = extension_from_url_or_type(url, content_type)
+    path = target_dir / f"drive-{index:02d}{ext}"
+    path.write_bytes(data)
+    return path if path.stat().st_size > 0 else None
+
+
+def extract_drive_folder_file_ids(folder_url: str) -> list[str]:
+    folder_id = google_drive_folder_id(folder_url)
+    if not folder_id:
+        return []
+    page = http_get(f"https://drive.google.com/drive/folders/{folder_id}?usp=sharing").decode("utf-8", errors="ignore")
+    ids: set[str] = set()
+    for pattern in [
+        r"/file/d/([A-Za-z0-9_-]+)",
+        r'data-id="([A-Za-z0-9_-]+)"',
+        r'\["([A-Za-z0-9_-]{20,})","[^"]+\.(?:png|jpg|jpeg|webp)"',
+    ]:
+        ids.update(re.findall(pattern, page, flags=re.I))
+    return list(ids)[:40]
+
+
+def download_url_asset(url: str, target_dir: Path, index: int) -> Path | None:
+    file_id = google_drive_file_id(url)
+    if file_id:
+        return download_drive_file(file_id, target_dir, index)
+    request = Request(url, headers={"User-Agent": "Mozilla/5.0 GeradorDeArtes/1.0"})
+    with urlopen(request, timeout=60) as response:
+        data = response.read()
+        content_type = response.headers.get("Content-Type", "")
+    if not (content_type.lower().startswith("image/") or Path(urlparse(url).path).suffix.lower() in IMAGE_EXTS):
+        return None
+    path = target_dir / f"url-{index:02d}{extension_from_url_or_type(url, content_type)}"
+    path.write_bytes(data)
+    return path
+
+
+def resolve_assets_source(value: str, job_id: str | None = None) -> Path:
+    raw = value.strip().strip('"')
+    if not raw:
+        raise ValueError("Informe uma pasta local, URL de imagem ou pasta publica do Google Drive.")
+    lines = [line.strip() for line in raw.splitlines() if line.strip()]
+    if len(lines) == 1 and not is_url(lines[0]):
+        return safe_path(lines[0])
+
+    cache_id = job_id or uuid.uuid4().hex
+    target_dir = ASSET_CACHE / cache_id
+    if target_dir.exists():
+        shutil.rmtree(target_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    downloaded: list[Path] = []
+    for index, line in enumerate(lines, start=1):
+        if google_drive_folder_id(line):
+            file_ids = extract_drive_folder_file_ids(line)
+            for offset, file_id in enumerate(file_ids, start=len(downloaded) + 1):
+                path = download_drive_file(file_id, target_dir, offset)
+                if path:
+                    downloaded.append(path)
+            continue
+        if is_url(line):
+            path = download_url_asset(line, target_dir, index)
+            if path:
+                downloaded.append(path)
+
+    if not downloaded:
+        raise ValueError("Nenhuma imagem publica foi baixada. Verifique se a pasta/arquivo do Google Drive esta compartilhado.")
+    return target_dir
 
 
 def find_assets(assets_path: Path) -> dict[str, list[str]]:
@@ -197,7 +342,7 @@ def generate_copy(payload: dict[str, Any]) -> str:
     briefing = payload.get("briefing", "")
     model = payload.get("textModel") or os.environ.get("OPENAI_TEXT_MODEL", "gpt-5.1")
     prompt = f"""
-Voce e um estrategista de conteudo para carrosseis de Instagram da marca 11RUN.
+Voce e um estrategista de conteudo para carrosseis de Instagram. Use a marca e o tom do cliente apenas quando estiverem claros no briefing ou nos assets.
 Crie uma copy completa para o carrossel e uma estrutura slide a slide.
 
 Estilo visual selecionado: {style_id} - {STYLE_PRESETS.get(style_id, "")}
@@ -242,7 +387,8 @@ def maybe_apply_real_logo(image_path: Path, logo_path: Path | None, mode: str) -
 
 def generate_carousel(payload: dict[str, Any]) -> dict[str, Any]:
     client = open_client()
-    assets_path = safe_path(payload["assetsPath"])
+    job_id = payload.get("jobId")
+    assets_path = resolve_assets_source(payload["assetsPath"], job_id=job_id)
     output_path = safe_path(payload["outputPath"])
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -269,7 +415,16 @@ def generate_carousel(payload: dict[str, Any]) -> dict[str, Any]:
     final_dir.mkdir(exist_ok=True)
 
     generated: list[str] = []
+    raw_generated: list[str] = []
     for idx in range(1, slide_count + 1):
+        if job_id:
+            set_job(
+                job_id,
+                status="running",
+                stage=f"Gerando slide {idx:02d}/{slide_count}",
+                current=idx,
+                total=slide_count,
+            )
         prompt = image_prompt(
             briefing=briefing,
             slide_spec=slide_specs[idx - 1],
@@ -295,12 +450,27 @@ def generate_carousel(payload: dict[str, Any]) -> dict[str, Any]:
         raw_path = raw_dir / f"{idx:02d}-arte.png"
         final_path = final_dir / f"{idx:02d}-arte.png"
         raw_path.write_bytes(base64.b64decode(result.data[0].b64_json))
+        raw_generated.append(str(raw_path))
+        if job_id:
+            set_job(
+                job_id,
+                stage=f"Finalizando slide {idx:02d}/{slide_count}",
+                rawImages=raw_generated.copy(),
+                images=generated.copy(),
+            )
         im = Image.open(raw_path).convert("RGB")
         left = max(0, (im.width - 1080) // 2)
         top = max(0, (im.height - 1350) // 2)
         im.crop((left, top, left + 1080, top + 1350)).save(final_path, quality=96)
         maybe_apply_real_logo(final_path, logo_path, logo_mode)
         generated.append(str(final_path))
+        if job_id:
+            set_job(
+                job_id,
+                stage=f"Slide {idx:02d}/{slide_count} salvo",
+                rawImages=raw_generated.copy(),
+                images=generated.copy(),
+            )
 
     preview_path = output_path / "preview-contact-sheet.jpg"
     if generated:
@@ -317,6 +487,7 @@ def generate_carousel(payload: dict[str, Any]) -> dict[str, Any]:
         sheet.save(preview_path, quality=92)
 
     return {
+        "jobId": job_id,
         "outputPath": str(output_path),
         "copyPath": str(copy_file) if copy_file.exists() else None,
         "previewPath": str(preview_path) if generated else None,
@@ -324,9 +495,106 @@ def generate_carousel(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def start_carousel_job(payload: dict[str, Any]) -> dict[str, Any]:
+    job_id = uuid.uuid4().hex
+    set_job(
+        job_id,
+        id=job_id,
+        status="queued",
+        stage="Na fila",
+        current=0,
+        total=int(payload.get("slideCount", 10)),
+        images=[],
+        rawImages=[],
+        result=None,
+        error=None,
+        createdAt=time.time(),
+    )
+
+    def runner() -> None:
+        try:
+            set_job(job_id, status="running", stage="Preparando assets")
+            job_payload = dict(payload)
+            job_payload["jobId"] = job_id
+            result = generate_carousel(job_payload)
+            set_job(
+                job_id,
+                status="done",
+                stage="Concluido",
+                current=int(payload.get("slideCount", 10)),
+                result=result,
+                images=result.get("images", []),
+            )
+        except Exception as exc:
+            set_job(job_id, status="error", stage="Erro", error=str(exc))
+
+    threading.Thread(target=runner, daemon=True).start()
+    return {"jobId": job_id}
+
+
+def public_job(job: dict[str, Any]) -> dict[str, Any]:
+    images = job.get("images", [])
+    raw_images = job.get("rawImages", [])
+    return {
+        "id": job.get("id"),
+        "status": job.get("status"),
+        "stage": job.get("stage"),
+        "current": job.get("current", 0),
+        "total": job.get("total", 0),
+        "error": job.get("error"),
+        "result": job.get("result"),
+        "images": [
+            {"index": idx + 1, "url": f"/api/job-image?jobId={job.get('id')}&kind=final&index={idx}"}
+            for idx, _ in enumerate(images)
+        ],
+        "rawImages": [
+            {"index": idx + 1, "url": f"/api/job-image?jobId={job.get('id')}&kind=raw&index={idx}"}
+            for idx, _ in enumerate(raw_images)
+        ],
+        "updatedAt": job.get("updatedAt"),
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
+        query = parse_qs(urlparse(self.path).query)
+        if path == "/api/job-status":
+            job_id = query.get("jobId", [""])[0]
+            job = get_job(job_id)
+            if not job:
+                json_response(self, {"error": "Job nao encontrado."}, 404)
+                return
+            json_response(self, public_job(job))
+            return
+        if path == "/api/job-image":
+            job_id = query.get("jobId", [""])[0]
+            kind = query.get("kind", ["final"])[0]
+            try:
+                index = int(query.get("index", ["0"])[0])
+            except ValueError:
+                index = -1
+            job = get_job(job_id)
+            if not job:
+                json_response(self, {"error": "Job nao encontrado."}, 404)
+                return
+            key = "rawImages" if kind == "raw" else "images"
+            images = job.get(key, [])
+            if index < 0 or index >= len(images):
+                json_response(self, {"error": "Imagem nao encontrada."}, 404)
+                return
+            image_path = Path(images[index])
+            if not image_path.exists():
+                json_response(self, {"error": "Arquivo nao encontrado."}, 404)
+                return
+            data = image_path.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", mimetypes.guess_type(str(image_path))[0] or "image/png")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if path == "/":
             path = "/index.html"
         file_path = (PUBLIC / path.lstrip("/")).resolve()
@@ -351,9 +619,11 @@ class Handler(BaseHTTPRequestHandler):
                     "styles": list(STYLE_PRESETS.keys()),
                 }
             elif self.path == "/api/scan-assets":
-                data = find_assets(safe_path(payload["assetsPath"]))
+                data = find_assets(resolve_assets_source(payload["assetsPath"]))
             elif self.path == "/api/generate-copy":
                 data = {"copy": generate_copy(payload)}
+            elif self.path == "/api/start-carousel":
+                data = start_carousel_job(payload)
             elif self.path == "/api/generate-carousel":
                 data = generate_carousel(payload)
             else:
